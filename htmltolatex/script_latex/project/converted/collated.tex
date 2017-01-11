@@ -1,0 +1,25 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage{multirow}
+\begin{document}
+\title{Collated Results}
+\author{Shaona}
+\maketitle
+\begin{table}
+\caption{Performance over N,L}
+\label{tab:x1}
+\begin{tabular}{cc | * {7}{c|}}\cline{3-9}
+\cline{3-9}
+ &\\
+\hline
+\cline{3-9}
+\multicolumn{1}{ |c }{\multirow{3}{*}{\textbf{WebSpam high L}}} &\multicolumn{1}{ |c| }{\textbf{p2}} & 0.711 & 0.789 & 0.818 & 0.878 & - & 0.914 & 0.958\\
+\cline{2-9}
+\multicolumn{1}{ |c }{} &\multicolumn{1}{ |c| }{\textbf{treeopt}} & 0.664 & 0.757 & 0.779 & 0.847 & 0.881 & 0.908 & 0.957\\
+\cline{2-9}
+\multicolumn{1}{ |c }{} &\multicolumn{1}{ |c| }{\textbf{longestpath}} & 0.713 & 0.754 & 0.785 & 0.834 & 0.9 & 0.917 & 0.962\\
+\cline{2-9}
+\hline
+\hline
+\end{tabular}
+\end{table}
+\end{document}

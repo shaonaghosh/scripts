@@ -1,0 +1,696 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.TreeSet;
+import java.util.List;
+import org.jsoup.Jsoup;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import java.util.Iterator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.lang.Math;
+
+public class HtmlParserToTex {
+	
+	class HeaderValue {
+		int l, n;
+		public HeaderValue(int l, int n){
+			this.l = l;
+			this.n = n;
+		}
+		/* (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
+		@Override
+		public String toString() {
+			return "l" + l + "n" + n;
+		}
+		
+		
+	}
+	
+	class HashNode {
+		String data;
+		HashMap<String, HashNode> children;
+		
+		public HashNode(String data){
+			this.data = data;
+			children = new LinkedHashMap<>();
+		}
+		
+		public HashNode getOrMakeChild(String key){
+			return getOrMakeChild(key, key);
+		}
+		
+		public HashNode getOrMakeChild(String key, String value){
+			HashNode child;
+			if(children.containsKey(key))
+				child = children.get(key);
+			else{
+				child = new HashNode(value);
+				children.put(key, child);
+			}
+			return child;
+		}
+		
+		public List<HashNode> getChildren(){
+			return new ArrayList<>(children.values());
+		}
+		
+		public List<String> getKeys(){
+			return new ArrayList<>(children.keySet());
+		}
+		
+		public int getChildCount(){
+			int count = 0;
+			if(children.isEmpty())
+				count = 1;
+			else {
+				for(HashNode child : getChildren())
+					count += child.getChildCount();
+			}
+			return count;
+		}
+		
+		public int getChildCount(boolean descendants){
+			return descendants ? getChildCount() : children.size();
+		}
+		
+	}
+
+	static final int LINEOVERTASK = 1;
+	static final int LINEOVERALGO = 2;
+	static final int LINEOVERDATA = 3;
+	static final int TOTALLABSIZE = 5;
+	static final int TOTALCOLSSIZE = 25;
+	static final int TOTALGRAPHSIZE = 5;
+		
+	static final int SELECTEDKs[] = { 3 };
+	static final int TOTCOLUMNS = 25;
+	static final int GRAPHSZ = 5;
+	Integer varN[] = { 200, 400, 600, 800, 1000 };
+	Integer varL[] = { 8, 16, 32, 64, 128 };
+	String reportDir;
+	static final String CONVERTED_DIR = "converted";
+	
+	HashNode root;
+
+	public HtmlParserToTex(String dir) {
+		if (dir != null)
+			reportDir = dir;
+		else {
+			File file = new File(".");
+			try {
+				reportDir = file.getCanonicalPath() + "/";// +
+															// DEFAULT_RESULTS_DIR;
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
+		File outDir = new File(reportDir, CONVERTED_DIR);
+		outDir.mkdir();
+
+		root = new HashNode("root"); 
+	}
+	
+	public void addTree(File file){
+		HashMap<String, HeaderValue> headerMap = new LinkedHashMap<>();
+		String html = openPreprocessed(file, headerMap);
+		Document doc = Jsoup.parse(html);
+		String fname = doc.select("h1").text();//file.getName().replace(".html", "");
+		
+		//replace the names of the tasks
+		if(fname.equals("2 vs. 3 with five algorithms"))
+				fname = "2 vs.3";
+		else if(fname.equals("1 vs. 2 batch"))
+			fname = "1 vs. 2";
+		
+		
+		System.out.println("File: " + file.getName());
+		
+		for(String id : headerMap.keySet()){
+			Elements table = doc.select("table#" + id);
+			//System.out.println(table.toString());
+			boolean isHeader = true;
+			int[] kValues = new int[100];
+			HeaderValue ln = headerMap.get(id);
+			System.out.println("Table: l = " + ln.l + ", n = " + ln.n);
+			
+			for(Element tr: table.select("tr")){
+				if(isHeader){
+					int index = 0;
+					// Get the K values
+					for(Element th : tr.select("th")){
+						String text = th.text();
+						
+						Pattern p = Pattern.compile("(k)\\s*=\\s*(\\d+)");
+						Matcher m = p.matcher(text);
+						if (m.find()){
+							kValues[index++] = Integer.parseInt(m.group(2));
+						}
+					}
+					isHeader = false;
+				}else{
+					
+					int index = 0;
+					// Get the algo name
+					String algoName = "none";
+					Elements th = tr.select("th");
+					if(!th.isEmpty()){
+						algoName = th.text();
+						
+					}
+					//System.out.println(algoName);
+					
+					for(Element td : tr.select("td")){
+						// Get the actual values
+						String text = td.text();
+						//System.out.println(text);
+						Pattern p = Pattern.compile("(\\S+)\\s*\\((\\w+)\\s*=\\s*(\\S+)\\)");
+						Matcher m = p.matcher(text);
+						
+						if(m.find()){
+							//System.out.println(m.group(1) + "," + m.group(3));
+							String mean = m.group(1);
+							String sd = m.group(3);
+							String sdtruestr;
+							//change the value of s.dev as low k on digits had variance reported instead of s.dev
+							if(algoName.equals("treeopt")){
+								//convert to double and take sq root
+								double d = Double.parseDouble(sd);
+								Double sdtrue = Math.sqrt(d);
+								sd = sdtrue.toString();
+							}
+					
+								
+							
+							//Chucking sd as of now
+							
+							// We already have l and n and filename							
+							// Add to tree
+							addTreeItem(kValues[index++], ln.l, ln.n, fname, algoName, mean, sd);
+						}else{
+							addTreeItem(kValues[index++], ln.l, ln.n, fname, algoName, "-", "-");
+						}
+						
+						
+					}
+				}
+				
+			}
+			
+			//break;
+		}
+		
+		System.out.println("Total items " + root.getChildCount());
+	}
+	
+	public void addTreeItem(int k, int l, int n, String fileName, String algoName, String value, String sdvalue){
+		if(k != 3) //take only for k = 3
+			return;
+		if(n != 1000)
+			return;
+		HashNode fileNode = root.getOrMakeChild(fileName);
+		HashNode algoNode = fileNode.getOrMakeChild(algoName);		
+		HashNode kNode = algoNode.getOrMakeChild(Integer.toString(k));
+		HashNode nNode = kNode.getOrMakeChild(Integer.toString(n));
+		nNode.getOrMakeChild(Integer.toString(l), value);
+		nNode.getOrMakeChild(Integer.toString(l), sdvalue);
+		System.out.println( "Adding: " + 
+							"k = " + k +
+							", l = " + l +
+							", n = " + n +
+							", fileName = " + fileName +
+							", algoName = " + algoName +
+							", value = " + value +
+							", sd = " + sdvalue
+						  );
+	}
+
+	private String openPreprocessed(File file, HashMap<String, HeaderValue> tagMap){
+		StringBuffer sb = new StringBuffer();
+		try {
+			BufferedReader reader = new BufferedReader(new FileReader(file));
+			String line;
+			while((line = reader.readLine()) != null){
+				if(line.contains("<h3>")){
+				//	System.out.println(line);
+					// Parse the header: e.g. "l = 8, n = 200"
+					Pattern p = Pattern.compile("([ln])\\s*=\\s*(\\d+)");
+					Matcher m = p.matcher(line);
+					int n = 0, l = 0;
+					if (m.find()){
+					    l = Integer.parseInt(m.group(2));
+						//System.out.println("l: " + l);
+					}else{
+						System.err.println("Failed to find l");
+					}
+					if (m.find()){
+						n = Integer.parseInt(m.group(2));
+					   // System.out.println("n: " + n);
+					}else{
+						System.err.println("Failed to find n");
+					}
+					
+					String nextLine = reader.readLine();
+					HeaderValue v = new HeaderValue(l, n);
+					
+					if(tagMap != null)
+						tagMap.put(v.toString(), v);
+					
+					if(nextLine != null && nextLine.contains("<table")){
+						nextLine = nextLine.replace("<table", "<table id=" + v);
+					}else{
+						System.err.println("<table> not found for " + line);
+					}
+					
+					sb.append(line).append("\n").append(nextLine).append("\n");
+					
+					
+				}else{
+					sb.append(line).append("\n");
+				}
+			}
+			
+			reader.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		return sb.toString();
+	}
+	
+	public void collateLatex(String fileName){
+		System.out.println("Collating results into LaTeX..");
+		File outFile = new File(reportDir + "/" + CONVERTED_DIR, fileName);
+		System.out.println(outFile);
+		System.out.println("Writing to " + outFile.getName());
+		
+		try {
+			BufferedWriter latex = new BufferedWriter(new FileWriter(outFile));
+			openLatex(latex);
+			//addLineBreak(latex);
+			
+			//openTable(String.format("Performance over N,L,K"), count++, writer);
+		
+			//Document doc = Jsoup.parse(input, "UTF-8", "");
+			
+			//Write the table headers - starting with ks
+			//addColumnHeader(SELECTEDKs[0],1,writer);
+			//addGraphSzHeader(writer);
+			//addLabelsHeader(writer);
+			HashNode algoNode0 = root.getChildren().get(0).getChildren().get(0);
+			int colCount = algoNode0.getChildren().get(0).getChildCount();
+			
+			openTable("Performance over N,L,K" , 1, colCount, latex);
+			addHorizontalLine(3, colCount + 2, latex);
+			
+			
+			//Add the headers
+			addEmptyItem(latex);			
+			for(HashNode kNode : algoNode0.getChildren()){
+				addEmptyItem(latex);
+				addMultiCol(kNode.getChildCount(), " c |", boldText("K = " + kNode.data), latex);
+			}
+			addLineBreak(latex);
+			addHorizontalLine(3, colCount + 2, latex);
+			
+			addEmptyItem(latex);
+			for(HashNode kNode : algoNode0.getChildren()){
+				for(HashNode nNode : kNode.getChildren()){
+					addEmptyItem(latex);
+					addMultiCol(nNode.getChildCount(), " c |", boldText("N = " + nNode.data), latex);
+				}
+			}
+			addLineBreak(latex);
+			addHorizontalLine(3, colCount + 2, latex);
+			
+			addEmptyItem(latex);
+			for(HashNode kNode : algoNode0.getChildren()){
+				for(HashNode nNode : kNode.getChildren()){
+					for(String lValue : nNode.getKeys()){
+						addItem(boldText("L = " + lValue), latex);
+					}
+				}
+			}
+			addLineBreak(latex);
+			
+			
+			addHorizontalLine(latex);
+			addHorizontalLine(3, colCount + 2, latex);
+			//Now the data
+			// Along with file and algo names
+			for(HashNode fileNode : root.getChildren()){
+				boolean first = true;
+				addMultiCol(1, "|c", makeMultiRow(fileNode.getChildCount(false), boldText(fileNode.data)), latex);
+				for(HashNode algoNode : fileNode.getChildren()){
+					if(!first){
+						addMultiCol(1, "|c", "", latex);
+					}
+					addEmptyItem(latex);
+					addMultiCol(1, "|c|", boldText(algoNode.data), latex);
+					for(HashNode kNode : algoNode.getChildren()){
+						for(HashNode nNode : kNode.getChildren()){
+							for(HashNode lNode : nNode.getChildren()){
+								addItem(lNode.data, latex);
+							}
+						}
+					}
+					addLineBreak(latex);
+					addHorizontalLine(2, colCount + 2, latex);
+					
+					
+					first = false;
+				}
+				addHorizontalLine(latex);
+				addHorizontalLine(latex);
+				
+				//break;
+			}
+			
+			/*for(Integer num : varN){
+				for(Integer lab : varL){
+					String tablename = String.format("l=%d, n=%d",lab,num);
+					Elements tablhdr = doc.select("h3");
+					Elements tables = doc.select("table");
+					Iterator<Element> tabhdrit = tablhdr.iterator();
+					while(tabhdrit.hasNext())
+					{
+						Element tabname = tabhdrit.next();
+						if(tabname.hasText()){
+								String tabnamestr = tabname.text();
+								if(tabnamestr.equals(tablename)){
+									//get the corresponding table and the k values
+									Iterator<Element> tableit = tables.iterator();
+									if(tableit.hasNext()){
+										Element tableforname = tableit.next();
+										Elements rows = tableforname.select("tr");
+									}
+									}
+									
+									Iterator<Element> rowIterator = rows.iterator();
+									//rowIterator.next();
+									boolean wasMatch = false;
+
+									Element coldata;
+									Element hdrdata;
+									while (rowIterator.hasNext()) {
+										Element row = rowIterator.next();
+										Iterator<Element> hdrIterator = row.select("th").iterator();
+										while (hdrIterator.hasNext()) {
+												hdrdata = hdrIterator.next();
+												if (hdrdata.hasText()){
+														String hdrtext = hdrdata.text();
+														if(hdrtext.charAt(0) == 'k' && Character.getNumericValue(hdrtext.charAt(hdrtext.length()-1)) == SELECTEDKs[0]){
+															System.out.println("k = " + hdrtext.charAt(hdrtext.length()-1));
+															//addColumnHeader(SELECTEDKs[0],1,writer);
+															break;
+														}
+												}
+										}
+
+								}
+						}
+					}
+			Elements cols = row.select("td");
+			System.out.println("text : " + cols.text());
+			int colsz = cols.size();
+			for (int ii = 0; ii < colsz; ++ii) {
+				coldata = cols.get(ii);
+				System.out.println("text : " + coldata.text());
+
+			}
+
+		}
+		}
+		}*/
+			closeTable(latex);
+			//addLineBreak(latex);
+			closeLatex(latex);
+			latex.close();
+		}catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+
+
+	private void openLatex(BufferedWriter latex) throws IOException {
+		String user = System.getenv("USERNAME").replace('_', ' ');
+		latex.write("\\documentclass[a4paper,12pt]{article}\n"
+				+ "\\usepackage{multirow}\n" + "\\begin{document}\n"
+				+ "\\title{Collated Results}\n" + "\\author{" + user + "}\n"
+				+ "\\maketitle\n");
+	}
+
+	private void closeLatex(BufferedWriter latex) throws IOException {
+		latex.write("\\end{document}\n");
+	}
+
+	private void addLineBreak(BufferedWriter latex) throws IOException {
+		latex.write("\\\\\n");
+	}
+
+	@SuppressWarnings("unused")
+	private void addParagraph(BufferedWriter latex) throws IOException {
+		latex.write("\n");
+	}
+
+	private void openTable(String caption, int number, int colCount, BufferedWriter latex)
+			throws IOException {
+		latex.write("\\begin{table}\n");
+		latex.write("\\caption{" + caption + "}\n" + "\\label{tab:x" + number
+				+ "}\n");
+		latex.write("\\begin{tabular}{cc | * {" + colCount + "}{c|}}");
+	}
+
+	private void closeTable(BufferedWriter latex) throws IOException {
+		latex.write("\\end{tabular}\n");
+		latex.write("\\end{table}\n");
+	}
+
+	@SuppressWarnings("unused")
+	private void addHeading(String header, BufferedWriter latex)
+			throws IOException {
+		latex.write("\\section{" + header + "}\n");
+
+	}
+	
+	private void addHorizontalLine(BufferedWriter latex) throws IOException {
+		latex.write("\\hline\n");
+	}
+	
+	private void addHorizontalLine(int start, int end, BufferedWriter latex) throws IOException {
+		latex.write("\\cline{" + start + "-" + end + "}\n");	
+	}
+	
+	private void addEmptyItem(BufferedWriter latex) throws IOException {
+		latex.write(" &");
+		
+	}
+	
+	private void addItem(String item, BufferedWriter latex) throws IOException {
+		if (!item.isEmpty()) {
+			latex.write(" & " + item);
+		} else {
+			latex.write(" & -");
+		}
+
+	}
+	
+	private String boldText(String item){
+		return "\\textbf{" + item + "}";
+	}
+	
+	/*private void endLine(BufferedWriter latex) throws IOException {
+		latex.write("\\\\\n");
+	}*/
+	
+	private void addMultiCol(int cols, String format, String data, BufferedWriter latex) throws IOException{
+		//latex.write(" & ");
+		latex.write("\\multicolumn{" + cols + "}{ " + format + " }{" + data + "}");
+	}
+	
+	private String makeMultiRow(int rows, String data){
+		//latex.write(" & ");
+		return("\\multirow{" + rows + "}{*}{" + data + "}");
+	}
+
+	// private void addTableHeader(String[] header, int span, BufferedWriter
+	// latex) throws IOException {
+	// StringBuilder sb = new StringBuilder("{| l | ");
+	// StringBuilder sb2 = new StringBuilder("&");
+	// for(int i = 0; i < header.length; i++){
+	// sb.append(" c");
+	// sb2.append(" \\textbf{" + header[i] + "}");
+	// if( i < header.length - 1){
+	// sb.append(" |");
+	// sb2.append(" &");
+	// }else{
+	// sb2.append(" \\\\\n");
+	// }
+	//
+	// }
+	// sb.append(" | }\n");
+	//
+	// latex.write(sb.toString());
+	// latex.write("\\hline\n");
+	// latex.write(sb2.toString());
+	// latex.write("\\hline\n");
+	//
+	// }
+	private void addLabelsHeader(BufferedWriter latex)
+	throws IOException{
+		StringBuilder strHdrNb0 = new StringBuilder("& & \\multicolumn");
+		latex.write(strHdrNb0.toString());
+		for(int nolab = 0; nolab < TOTALLABSIZE; ++nolab)
+		{
+		for(Integer itl : varL){
+			StringBuilder strHdrNb1 = new StringBuilder("{L = " + itl + "}");
+			latex.write( strHdrNb1.toString());
+			
+		}
+		StringBuilder strHdrNb2;
+		if(nolab < (TOTALLABSIZE-1)){
+			strHdrNb2 = new StringBuilder("&");
+
+		}else{
+			strHdrNb2 = new StringBuilder("\\");
+		}
+		latex.write( strHdrNb2.toString());
+		}
+		StringBuilder strHdrNb4 = new StringBuilder("\\" + " \\cline{" + LINEOVERTASK + "-" + String.format("%d",TOTALCOLSSIZE+LINEOVERALGO)+ "}");
+		latex.write( strHdrNb4.toString());
+	}
+	
+	private void addGraphSzHeader(BufferedWriter latex)
+			throws IOException {
+		StringBuilder strHdrNb0 = new StringBuilder("& & \\multicolumn");
+		latex.write(strHdrNb0.toString());
+		StringBuilder strHdrNb1 = new StringBuilder("{" + varN.length+ "} {c|}");
+		latex.write(strHdrNb1.toString());
+		for(Integer itn : varN){
+			StringBuilder strHdrNb2 = new StringBuilder("{N = " + itn + "}");
+			latex.write(strHdrNb2.toString());
+			StringBuilder strHdrNb3;
+			if( itn != varN[varN.length-1]){
+				strHdrNb3 =  new StringBuilder("&");
+			}else{
+				strHdrNb3 = new StringBuilder("\\\\");
+			}
+			latex.write(strHdrNb3.toString());
+		}
+		StringBuilder strHdrNb4 = new StringBuilder("\\" + " \\cline{" + LINEOVERDATA + "-" + String.format("%d",TOTALCOLSSIZE+LINEOVERALGO)+ "}");
+		strHdrNb4.append("\n");
+		latex.write(strHdrNb4.toString());
+	}
+	
+	
+	private void addColumnHeader(int value, int span, BufferedWriter latex)
+			throws IOException {
+		StringBuilder sb = new StringBuilder("{cc | * { "
+				+ String.format("%d", TOTCOLUMNS) + "} {|c|} ");
+		// sb.append(" | }\n");
+		sb.append("\n");
+		latex.write(sb.toString());
+		StringBuilder sb2 = new StringBuilder("\\cline{3-"
+				+ String.format("%d", TOTCOLUMNS + 2) + "}");
+		sb2.append("\n");
+		latex.write(sb2.toString());
+		StringBuilder sb3 = new StringBuilder("& & \\multicolumn{"
+				+ String.format("%d", TOTCOLUMNS) + "} { | c | } { K = "
+				+ value + "} \\\\" + " \\cline{3-"
+				+ String.format("%d", TOTCOLUMNS + 2) + "}\n");
+		latex.write(sb3.toString());
+	}
+
+	/*
+	 * private void addSecColumnHeader(int value, int span, BufferedWriter
+	 * latex) throws IOException { StringBuilder sb = new StringBuilder("{" + 5
+	 * + "} {c|} {N ="; for sb.append("\n"); latex.write(sb.toString());
+	 * StringBuilder sb2 = new StringBuilder("\\cline{3-"+ String.format ("%d",
+	 * TOTCOLUMNS+2) + "}"); sb2.append("\n"); latex.write(sb2.toString());
+	 * StringBuilder sb3 = new StringBuilder("& & \\multicolumn{" +
+	 * String.format ("%d", TOTCOLUMNS ) + "} { | c | } { K = " + value +
+	 * "} \\\\" + " \\cline{3-" + String.format ("%d",TOTCOLUMNS+2) + "}\n");
+	 * latex.write(sb3.toString()); }
+	 */
+
+	private void openRow(String header, BufferedWriter latex)
+			throws IOException {
+		latex.write(" \\textbf{" + header + "}");
+
+	}
+
+
+
+	private void closeRow(BufferedWriter latex) throws IOException {
+		latex.write(" \\\\\n");
+		latex.write("\\hline\n");
+	}
+
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		HtmlParserToTex collater;
+		collater = new HtmlParserToTex(null);
+		//System.out.println(collater.openPreprocessed(new File("collated_1vs2.html"), null));
+		if (args.length < 2)
+			collater = new HtmlParserToTex(null);
+		else
+			collater = new HtmlParserToTex(args[0]);
+
+		//collater.addTree(new File("collated_1vs2.html"));
+		//Add more
+		//collater.addTree(new File("collated_2vs3_5algo.html"));
+		collater.addTree(new File("collated_2vs3.html"));
+		collater.addTree(new File("collated_3vs8.html"));
+		collater.addTree(new File("collated_4vs7.html"));
+		collater.addTree(new File("collated_6vs9.html"))
+		
+		collater.collateLatex("collated.tex");
+		
+		// collater.collateResults();
+		//collater.collateLatex();*/
+	}
+
+}
+
+// Iterator<Element> ith = table.select("th").iterator();
+// Iterator<Element> itd = table.select("td").iterator();
+//
+// while(ith.hasNext()){
+// System.out.println("text : "+ith.next().text());
+//
+// }
+// String title = doc.title();
+// System.out.println("Document title : "+title);
+// while(itd.hasNext()){
+// System.out.println("text : "+itd.next().text());
+//
+// }

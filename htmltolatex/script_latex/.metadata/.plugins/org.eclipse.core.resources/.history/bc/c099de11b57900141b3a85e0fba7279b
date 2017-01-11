@@ -1,0 +1,262 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.TreeSet;
+import java.util.List;
+import org.jsoup.Jsoup;
+import org.jsoup.helper.Validate;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import java.util.Iterator;
+
+public class HtmlParserToTex {
+	
+	static final int SELECTEDKs[] = {3};
+	static final int TOTCOLUMNS = 25;
+	static final int GRAPHSZ= 5;
+	static final int varN[] = {200,400,600,800,1000};
+	static final int varL[] = {8,16,32,64,128};
+	String reportDir;
+	static final String COLLATED_DIR = "collated";
+	
+	public HtmlParserToTex(String dir){
+		if(dir != null)
+			reportDir = dir;
+		else{
+			File file = new File(".");
+			try {
+				reportDir = file.getCanonicalPath() + "/";// + DEFAULT_RESULTS_DIR;
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		File outDir = new File(reportDir, COLLATED_DIR);
+		outDir.mkdir();
+	
+	}
+	
+	public void collateLatex(){
+		System.out.println("Collating results into LaTeX..");
+		File outFile = new File(reportDir + "/" + COLLATED_DIR, "collated.tex");
+		System.out.println("Writing to " + outFile.getName());
+		
+		File input = new File("collated_1vs2.html");
+		int count = 1;
+		try {
+			BufferedWriter writer = new BufferedWriter(new FileWriter(outFile));
+			openLatex(writer);
+			addLineBreak(writer);
+			openTable(String.format("Performance over N,L,K"), count++, writer);
+		
+		Document doc = Jsoup.parse(input, "UTF-8", "");
+		
+		
+		/*for(Integer num : varN){
+			for(Integer lab : varL){
+				String tablename = String.format("l=%d, n=%d",lab,num);
+				Element table = doc.select("table").first();
+				Elements tablhdr = table.select("th");
+			}
+		}*/
+		Elements tablhdr = doc.select("h3");
+		Element table = doc.select("table").first();
+		Elements rows = table.select("tr");
+		Iterator<Element> rowIterator = rows.iterator();
+		//rowIterator.next();
+		boolean wasMatch = false;
+
+		Element coldata;
+		Element hdrdata;
+		while (rowIterator.hasNext()) {
+			Element row = rowIterator.next();
+			Iterator<Element> hdrIterator = row.select("th").iterator();
+			while (hdrIterator.hasNext()) {
+				hdrdata = hdrIterator.next();
+				if (hdrdata.hasText()){
+				String hdrtext = hdrdata.text();
+				if(hdrtext.charAt(0) == 'k' && Character.getNumericValue(hdrtext.charAt(hdrtext.length()-1)) == SELECTEDKs[0]){
+					System.out.println("k = " + hdrtext.charAt(hdrtext.length()-1));
+					addColumnHeader(SELECTEDKs[0],1,writer);
+					break;
+				}
+				}
+			}
+			/*Elements cols = row.select("td");
+			System.out.println("text : " + cols.text());
+			int colsz = cols.size();
+			for (int ii = 0; ii < colsz; ++ii) {
+				coldata = cols.get(ii);
+				System.out.println("text : " + coldata.text());
+
+			}*/
+
+		}
+
+		closeTable(writer);
+		addLineBreak(writer);
+		closeLatex(writer);
+		writer.close();
+		}catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	private void openLatex(BufferedWriter latex) throws IOException{
+		String user = System.getenv("USERNAME").replace('_', ' ');
+		latex.write(
+				"\\documentclass[a4paper,12pt]{article}\n" + 
+			    "\\usepackage{multirow}\n" +
+				"\\begin{document}\n" + 
+				"\\title{Collated Results}\n" +
+				"\\author{" + user + "}\n" +
+				"\\maketitle\n"
+				);
+	}
+	
+	private void closeLatex(BufferedWriter latex)throws IOException{
+		latex.write("\\end{document}\n");
+	}
+	
+	private void addLineBreak(BufferedWriter latex)throws IOException{
+		latex.write("\\\n");
+	}
+	
+	@SuppressWarnings("unused")
+	private void addParagraph(BufferedWriter latex)throws IOException{
+		latex.write("\n");
+	}
+	
+	private void openTable(String caption, int number, BufferedWriter latex)throws IOException{
+		latex.write("\\begin{table}\n");
+		latex.write("\\caption{" + caption + "}\n" +
+					"\\label{tab:x" + number + "}\n");
+		latex.write("\\begin{tabular}");
+	}
+	
+	private void closeTable(BufferedWriter latex)throws IOException{
+		latex.write("\\end{tabular}\n");
+		latex.write("\\end{table}\n");
+	}
+	
+	@SuppressWarnings("unused")
+	private void addHeading(String header, BufferedWriter latex) throws IOException {
+		latex.write("\\section{" + header + "}\n");
+		
+	}
+	
+//	private void addTableHeader(String[] header, int span, BufferedWriter latex) throws IOException {
+//		StringBuilder sb = new StringBuilder("{| l | ");
+//		StringBuilder sb2 = new StringBuilder("&");
+//		for(int i = 0; i < header.length; i++){
+//			sb.append(" c");
+//			sb2.append(" \\textbf{" + header[i] + "}");
+//			if( i < header.length - 1){
+//				sb.append(" |");
+//				sb2.append(" &");
+//			}else{
+//				sb2.append(" \\\\\n");
+//			}
+//			
+//		}
+//		sb.append(" | }\n");
+//		
+//		latex.write(sb.toString());
+//		latex.write("\\hline\n"); 
+//		latex.write(sb2.toString());
+//		latex.write("\\hline\n"); 
+//		
+//	}
+	
+	private void addColumnHeader(int value, int span, BufferedWriter latex) throws IOException {
+		StringBuilder sb = new StringBuilder("{cc | * { "+ String.format ("%d", TOTCOLUMNS) + "} {|c|} ");
+	    //sb.append(" | }\n");
+		sb.append("\n");
+		latex.write(sb.toString());
+		StringBuilder sb2 = new StringBuilder("\\cline{3-"+ String.format ("%d", TOTCOLUMNS+2) + "}");
+		sb2.append("\n");
+		latex.write(sb2.toString());
+		StringBuilder sb3 = new StringBuilder("& & \\multicolumn{" + String.format ("%d", TOTCOLUMNS ) + "} { | c | } { K = " + value + "} \\\\" + " \\cline{3-" +  String.format ("%d",TOTCOLUMNS+2) + "}\n");
+		latex.write(sb3.toString()); 
+	}
+	
+	/*private void addSecColumnHeader(int value, int span, BufferedWriter latex) throws IOException {
+		StringBuilder sb = new StringBuilder("{" + 5 + "} {c|} {N =";
+		for 
+		sb.append("\n");
+		latex.write(sb.toString());
+		StringBuilder sb2 = new StringBuilder("\\cline{3-"+ String.format ("%d", TOTCOLUMNS+2) + "}");
+		sb2.append("\n");
+		latex.write(sb2.toString());
+		StringBuilder sb3 = new StringBuilder("& & \\multicolumn{" + String.format ("%d", TOTCOLUMNS ) + "} { | c | } { K = " + value + "} \\\\" + " \\cline{3-" +  String.format ("%d",TOTCOLUMNS+2) + "}\n");
+		latex.write(sb3.toString()); 
+	}*/
+	
+	private void openRow(String header, BufferedWriter latex) throws IOException {
+		latex.write(
+				" \\textbf{" + header + "}"
+				);
+		
+	}
+	
+	private void addItem(String item, BufferedWriter latex) throws IOException {
+		if( !item.isEmpty()){
+			latex.write(	" & " + item);
+		}else{
+			latex.write(	" & -");
+		}
+
+	}
+	
+	private void closeRow(BufferedWriter latex) throws IOException {
+		latex.write(" \\\\\n"); 
+		latex.write("\\hline\n"); 
+	}
+	
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		HtmlParserToTex collater;
+		if(args.length < 2)
+			collater = new HtmlParserToTex(null);
+		else
+			collater = new HtmlParserToTex(args[0]);
+
+		//collater.collateResults();
+		collater.collateLatex();
+	}
+	
+	
+}
+
+
+
+
+
+// Iterator<Element> ith = table.select("th").iterator();
+// Iterator<Element> itd = table.select("td").iterator();
+//
+// while(ith.hasNext()){
+// System.out.println("text : "+ith.next().text());
+//
+// }
+// String title = doc.title();
+// System.out.println("Document title : "+title);
+// while(itd.hasNext()){
+// System.out.println("text : "+itd.next().text());
+//
+// }

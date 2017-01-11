@@ -1,0 +1,161 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.Map.Entry;
+
+
+public class Csv2Dot {
+	
+	class DotGraph {
+		
+		LinkedHashMap<Integer, Set<Integer>> edges;
+		
+		public DotGraph(){
+			edges = new LinkedHashMap<Integer, Set<Integer>>();
+		}
+		
+		public void addEdge(int first, int second){
+			int one, two;
+			if( first <= second){
+				one = first;
+				two = second;
+			}
+			else{
+				one = second;
+				two = first;
+			}
+			//for di graph
+			//one = first;
+			//two = second;
+			
+			Set<Integer> neigh = null;
+			if( edges.containsKey(one)){
+				neigh = edges.get(one);
+			}else{
+				neigh = new LinkedHashSet<>();
+				edges.put(one, neigh);
+			}
+			
+			neigh.add(two);
+		}
+		
+		public void clear(){
+			edges.clear();
+		}
+
+		@Override
+		public String toString() {
+			//StringBuilder sb = new StringBuilder("graph {\n");
+			StringBuilder sb = new StringBuilder("digraph {\n");
+			for(Entry<Integer, Set<Integer>> entry : edges.entrySet()){
+				for(Integer n : entry.getValue()){
+					//sb.append(entry.getKey()).append(" -- ").append(n).append(";\n");
+					sb.append(entry.getKey()).append(" -> ").append(n).append(";\n");
+				}
+			}
+			sb.append("}");
+			return sb.toString();
+		}
+		
+		
+	}
+	
+	DotGraph graph;
+	
+	public Csv2Dot(){
+		graph = new DotGraph();
+	}
+	
+	public void parseCSV(File file){
+		//File file = new File(path);
+		if( file.exists()){
+			BufferedReader reader;
+			try {
+				reader = new BufferedReader(new FileReader(file));
+				
+				String row;
+				int r = 0;
+				graph.clear();
+				
+				while((row = reader.readLine()) != null){
+					String[] values = row.split(",|\\W");
+					if( values != null){
+						int c = 0;
+						for(String value : values){
+							if( !value.isEmpty()){
+								if( Integer.valueOf(value) != 0 ){
+									
+									//System.out.println("Adding edge " + (int)(r+1) + " -- " + (int)(c+1));
+									graph.addEdge(r + 1, c + 1);
+								}
+								c++;
+							}
+						}
+					}
+					r++;
+				}
+				reader.close();
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+		}
+	}
+	
+	
+	
+	public void createDOT(String path){
+		File file = new File(path);
+		
+		try {
+			BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+			writer.write(graph.toString());
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+	
+	public void convertFiles(){
+		File root = new File(".");
+		File[] files = root.listFiles(new FilenameFilter() {
+			
+			@Override
+			public boolean accept(File dir, String name) {
+				return name.toLowerCase().endsWith(".csv");
+			}
+		});
+		
+		for(File f : files){
+			String csvName = f.getName();
+			String outName = csvName.substring(0, csvName.lastIndexOf('.')) + ".dot";
+			System.out.println("Converting " + csvName + " to " + outName);
+			parseCSV(f);
+			createDOT(outName);
+		}
+	}
+
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		Csv2Dot c2d = new Csv2Dot();
+		c2d.convertFiles();
+
+	}
+
+}
